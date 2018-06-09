@@ -3,12 +3,18 @@ from twisted.protocols import basic
 
 class FingerProtocol(basic.LineReceiver):
     def lineReceived(self, user):        
-        self.transport.write(self.factory.getUser(user) + b"\r\n")
-        print("we received from user: {}", user)
-        self.transport.loseConnection()
+        d = self.factory.getUser(user)
         
-  #  def connectionMade(self):
-   #     self.transport.loseConnection()
+        def onError(err):
+            return 'internal error in server'
+        d.addErrback(onError)
+        
+        def writeResponse(message):
+            self.transport.write(message + b'\r\n')
+            self.transport.loseConnection()
+            
+        d.addCallback(writeResponse)
+            
 
 class FingerFactory(protocol.ServerFactory):
     protocol = FingerProtocol
@@ -17,7 +23,7 @@ class FingerFactory(protocol.ServerFactory):
         self.users = users
         
     def getUser(self, user):
-        return self.users.get(user, b"no such user")
+        return defer.succeed(self.users.get(user, b"No such user"))
     
 fingerEndpoint = endpoints.serverFromString(reactor, "tcp:1079")
 fingerEndpoint.listen(FingerFactory({b'moshez' : b'happy and well'}))
