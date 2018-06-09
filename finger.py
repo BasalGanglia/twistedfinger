@@ -1,4 +1,4 @@
-from twisted.internet import protocol, reactor, defer, endpoints
+from twisted.internet import protocol, reactor, defer, utils, endpoints
 from twisted.protocols import basic
 
 class FingerProtocol(basic.LineReceiver):
@@ -10,7 +10,8 @@ class FingerProtocol(basic.LineReceiver):
         d.addErrback(onError)
         
         def writeResponse(message):
-            self.transport.write(message + b'\r\n')
+            self.transport.write(b'We found it : ' + message + b'\r\n')
+            print("Success!!")
             self.transport.loseConnection()
             
         d.addCallback(writeResponse)
@@ -19,13 +20,13 @@ class FingerProtocol(basic.LineReceiver):
 class FingerFactory(protocol.ServerFactory):
     protocol = FingerProtocol
     
-    def __init__(self, users):
-        self.users = users
+   # def __init__(self, users):
+   #     self.users = users
         
     def getUser(self, user):
-        return defer.succeed(self.users.get(user, b"No such user"))
+        return utils.getProcessOutput(b"finger", [user])
+#        return utils.getProcessOutput(b"C:/work/TwistedFinger/dir.exe", [user])
     
 fingerEndpoint = endpoints.serverFromString(reactor, "tcp:1079")
-fingerEndpoint.listen(FingerFactory({b'moshez' : b'happy and well'}))
-print("where is this even printing...")
+fingerEndpoint.listen(FingerFactory())
 reactor.run()
