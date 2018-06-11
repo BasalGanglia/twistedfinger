@@ -40,58 +40,48 @@ class FingerFactory(protocol.ServerFactory):
         return defer.succeed(self.users.get(user, b"No Such user"))
 
 class FingerService(service.Service):
-    def __init__(self, users):
-        self.users = users
+    def __init__(self, filename):
+        self.users = {}
+        self.filename = filename
+        
+    def _read(self):
+        with open(self.filename, "rb") as f:
+            for line in f:
+                user, status = line.split(b':', 1)
+                user = user.strip()
+                status = status.strip()
+                self.users[user] = status
+        self.call = reactor.callLater(30, self._read)
+        
+    def startService(self):
+        self._read()
+        service.Service.startService(self)
+    
+    def stopService(self):        
+        service.Service.stopService(self)
+        self.call.cancel()
         
     def getUser(self, user):
         return defer.succeed(self.users.get(user, b"no such user"))
     
-    def setUser(self, user, status):
-        self.users[user] = status
-        
     def getFingerFactory(self):
         f = protocol.ServerFactory()
         f.protocol = FingerProtocol
         f.getUser = self.getUser
         return f
-    
-    def getFingerSetterFactory(self):
         
-        f = protocol.ServerFactory()
-        f.protocol = FingerSetterProtocol
-        f.setUser = self.setUser
-        return f
+        
+        
     
     
 application = service.Application('finger', uid=1, gid=1)
-f = FingerService({b'moshez' : b'happy and well'})
-serviceCollection = service.IServiceCollection(application)
-strports.service("tcp:79", f.getFingerFactory()
-                 ).setServiceParent(serviceCollection)
-strports.service("tcp:1079", f.getFingerSetterFactory()
-                 ).setServiceParent(serviceCollection)
-    
-        
-        
-        
+f = FingerService('C:\\work\\users.txt')
 
-        
-class FingerSetterFactory(protocol.ServerFactory):
-    protocol = FingerSetterProtocol
-    
-    def __init__(self, FingerFactory):
-        self.fingerFactory = FingerFactory
-    
-    def setUser(self, user, status):
-        self.fingerFactory.users[user] = status
-        
+finger = strports.service("tcp:79", f.getFingerFactory())
 
-ff = FingerFactory({b'moshez': b'happy and well'})
-fsf = FingerSetterFactory(ff)
-
-application = service.Application('finger', uid=1, gid=1)
-serviceCollection = service.IServiceCollection(application)
-strports.service("tcp:79", ff).setServiceParent(serviceCollection)
-strports.service("tcp:1079", fsf).setServiceParent(serviceCollection)
+finger.setServiceParent(service.IServiceCollection(application))
+f.setServiceParent(service.IServiceCollection(application))
+        
+        
     
     
