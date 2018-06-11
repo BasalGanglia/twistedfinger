@@ -28,11 +28,34 @@ class FingerFactory(protocol.ServerFactory):
     def getUser(self, user):
         return defer.succeed(self.users.get(user, b"No Such user"))
 
-application = service.Application('finger', uid=1, gid=1)
-factory = FingerFactory({b'moshez' : b'happy and well'})
-strports.service("tcp:79", factory, reactor=reactor).setServiceParent(
-    service.IServiceCollection(application)
-)
+class FingerSetterProtocol(basic.LineReceiver):
+    def connectionMade(self):
+        self.lines = []
     
+    def lineReceived(self, line):
+        self.lines.append(line)
+        
+    def connectionLost(self, reason):
+        user = self.lines[0]
+        status = self.lines[1]
+        self.factory.setUser(user, status)
+        
+class FingerSetterFactory(protocol.ServerFactory):
+    protocol = FingerSetterProtocol
+    
+    def __init__(self, FingerFactory):
+        self.fingerFactory = FingerFactory
+    
+    def setUser(self, user, status):
+        self.fingerFactory.users[user] = status
+        
+
+ff = FingerFactory({b'moshez': b'happy and well'})
+fsf = FingerSetterFactory(ff)
+
+application = service.Application('finger', uid=1, gid=1)
+serviceCollection = service.IServiceCollection(application)
+strports.service("tcp:79", ff).setServiceParent(serviceCollection)
+strports.service("tcp:1079", fsf).setServiceParent(serviceCollection)
     
     
