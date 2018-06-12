@@ -27,24 +27,28 @@ class FingerResource(resource.Resource):
     def __init__(self, users):
         self.users = users
         resource.Resource.__init__(self)
-        print("In finger resource init?? users are : ", users)
+ 
         
 
     def render_GET(self, request):
+        print("please get me..")
         return "<html>Hello, world!</html>"
     
-    def getChild(self, username, request):
+    def getChild(self, path, request):
         """
         'username is L{bytes}
         'request' is a 'twisted.web.server.Request
         """
-        print("We got this {0} and this {1}".format(username, request))
+        username = path
+   
         messagevalue = self.users.get(username)
+   
         if messagevalue:
             messagevalue = messagevalue.decode("ascii")
         if username:
             username = username.decode("ascii")
             
+   
         username = cgi.escape(username)
         
         if messagevalue is not None:
@@ -53,6 +57,7 @@ class FingerResource(resource.Resource):
         else:            
             text = '<h1>{}</h1><p>no such user</p>'.format(username)
         text = text.encode("ascii")
+        print("The final text is : ", text)
         return static.Data(text, 'text/html')
     
 class FingerService(service.Service):
@@ -82,7 +87,6 @@ class FingerService(service.Service):
     
     def getResource(self):
         r = FingerResource(self.users)
-        print("##################### WE ARE CALLED NOWWW!!!!!!!!!!!!!!!")
         return r
         
     def startService(self):
