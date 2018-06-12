@@ -5,7 +5,7 @@ from twisted.application import internet, service, strports
 from twisted.internet import protocol, reactor, defer, endpoints
 from twisted.words.protocols import irc
 from twisted.protocols import basic
-from twisted.web import resource, server, static
+from twisted.web import resource, server, static, xmlrpc
 
 import cgi
 
@@ -83,6 +83,9 @@ class FingerService(service.Service):
         
         r = resource.Resource()
         r.getChild = getData
+        x = xmlrpc.XMLRPC()
+        x.xmlrpc_getUser = self.getUser
+        r.putChild('RPC2', x)
         return r
             
     def getIRCBot(self, nickname):
