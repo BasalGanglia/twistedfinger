@@ -1,10 +1,12 @@
 # Read username, output from non-empty factory, drop connections
 # Use deferreds, to minimi...
 
-from twisted.application import service, strports
-from twisted.internet import protocol, reactor, defer
+from twisted.application import internet, service, strports
+from twisted.internet import protocol, reactor, defer, endpoints
+from twisted.words.protocols import irc
 from twisted.protocols import basic
 from twisted.web import resource, server, static
+
 import cgi
 
 
@@ -22,43 +24,28 @@ class FingerProtocol(basic.LineReceiver):
             self.transport.loseConnection()
         d.addCallback(writeResponse)    
 
-class FingerResource(resource.Resource):
-    
-    def __init__(self, users):
-        self.users = users
-        resource.Resource.__init__(self)
- 
+class IRCReplyBot(irc.IRCClient):
+    def connectionMade(self):
+        self.nickname = self.factory.nickname
+        irc.IRCClient.connectionMade(self)
         
-
-    def render_GET(self, request):
-        print("please get me..")
-        return "<html>Hello, world!</html>"
-    
-    def getChild(self, path, request):
-        """
-        'username is L{bytes}
-        'request' is a 'twisted.web.server.Request
-        """
-        username = path
-   
-        messagevalue = self.users.get(username)
-   
-        if messagevalue:
-            messagevalue = messagevalue.decode("ascii")
-        if username:
-            username = username.decode("ascii")
+    def privmsg(self, user, channel, msg):
+        user = user.split('!')[0]
+        if self.nickname.lower() == channel.lower():
+            d = self.factory.getUser(msg.encode("ascii"))
             
-   
-        username = cgi.escape(username)
+            def onError(err):
+                return b'Internal error'
+            d.addErrback(onError)
+            
+            def writeResponse(message):
+                message = message.decode("ascii")
+                irc.IRCClient.msg(self, user, msg + ': ' + message)
+            d.addCallback(writeResponse)
+            
+
+            
         
-        if messagevalue is not None:
-            messagevalue = cgi.escape(messagevalue)
-            text = '<h1>{}</h1><p>{}</p>'.format(username, messagevalue)
-        else:            
-            text = '<h1>{}</h1><p>no such user</p>'.format(username)
-        text = text.encode("ascii")
-        print("The final text is : ", text)
-        return static.Data(text, 'text/html')
     
 class FingerService(service.Service):
     def __init__(self, filename):
@@ -86,8 +73,24 @@ class FingerService(service.Service):
         return f
     
     def getResource(self):
-        r = FingerResource(self.users)
+        def getData(path, request):
+            user = self.users.get(path, b"No such users <p/> usage: site/user")
+            path = path.decode("ascii")
+            user = user.decode("ascii")
+            text = '<h1>{}</h1><p>{}</p>'.format(path, user)
+            text = text.encode("ascii")
+            return static.Data(text, 'text/html')
+        
+        r = resource.Resource()
+        r.getChild = getData
         return r
+            
+    def getIRCBot(self, nickname):
+        f = protocol.ClientFactory()
+        f.protocol = IRCReplyBot
+        f.nickname = nickname
+        f.getUser = self.getUser
+        return f
         
     def startService(self):
         self._read()
@@ -100,13 +103,19 @@ class FingerService(service.Service):
 
 application = service.Application('finger', uid=1, gid=1)
 f = FingerService('c:/work/users.txt')
+
 serviceCollection = service.IServiceCollection(application)
+
 f.setServiceParent(serviceCollection)
+
 strports.service("tcp:79", f.getFingerFactory()
                  ).setServiceParent(serviceCollection)
 strports.service("tcp:8000", server.Site(f.getResource())
                  ).setServiceParent(serviceCollection)
-        
+internet.ClientService(
+    endpoints.clientFromString(reactor, "tcp:irc.freenode.org:6667"),
+    f.getIRCBot('fingerbot997')).setServiceParent(serviceCollection)       
+
             
         
         
